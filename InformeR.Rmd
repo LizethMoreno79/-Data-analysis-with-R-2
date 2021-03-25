@@ -1,0 +1,300 @@
+---
+title: "Análisis Exploratorio de Datos"
+date: "`r Sys.Date()`"
+author: "Lizeth Moreno, María Belén Rosero" 
+output:
+   rmdformats::readthedown:
+    self_contained: true
+    thumbnails: true
+    lightbox: true
+    gallery: false
+    highlight: tango
+
+   
+---
+
+
+
+#Introducción
+El análisis exploratorio de datos es una herramienta que nos ayudan a organizar la información de una base para detectar algún patrón de comportamiento de los parámetros de interés. Con el uso de la función modificada `MYEDA`. En el presente informe realizaremos un análisis exploratorio de las varibales cuantitativas
+`Tiempo_Servicio_seg`y `Monto`, del mismo modo es importante hacer un análisis más profundo y esto es tratando la variable `Sucursal`.
+
+#Base
+Se procede a cargar la base proporcionada
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+library(openxlsx)
+library(tidyverse)
+library(magrittr)
+
+data_banco <- read.xlsx(xlsxFile = "Base/Data_Banco.xlsx", sheet = "Data")
+names(data_banco)[1]='ID_Sucursal'
+data_sucursal <- read.xlsx(xlsxFile = "Base/Data_Banco.xlsx", sheet = "Data_Sucursal")
+data_cajero = read.xlsx(xlsxFile = "Base/Data_Banco.xlsx", sheet = "Data_Cajero")
+data_cajero$Cajero = as.numeric(data_cajero$Cajero)
+data_cajero$Edad = as.numeric(data_cajero$Edad)
+
+data_1 <- data_banco %>%
+  left_join(data_sucursal,by="ID_Sucursal") %>%
+  left_join(data_cajero,by="Cajero") %>%
+  mutate(Anio.experiencia = 2019-Anio.Ingreso) %>% 
+  mutate(Satisfaccion = factor(Satisfaccion,
+                               levels = c('Muy Malo','Malo','Regular','Bueno','Muy Bueno'),
+                               labels = c('Muy Malo','Malo','Regular','Bueno','Muy Bueno'),
+                               ordered = T)) %>%
+  mutate_if(is.character, as.factor) %>%
+  mutate(Cajero=factor(Cajero)) %>% 
+  mutate(Monto=as.numeric(Monto)) %>% 
+  select(-Anio.Ingreso)
+  names(data_1)
+```
+
+
+#Análisis exploratorio de la Base
+A continuación vamos a realiza r un resumen breve de las variables y de la base 
+```{r}
+str(data_1)
+```
+
+```{r}
+summary(data_1)
+```
+
+##Análisis exploratorio de la variable Tiempo_Servicio_seg
+```{r}
+source("funciones.R")
+  data_1%>% summarise_at(vars(Tiempo_Servicio_seg), 
+                              funs(MEDIA= mean(., na.rm=TRUE), 
+                                   VARIANZA= var(., na.rm = TRUE),
+                                   RIQ=IQR(., na.rm = TRUE),
+                                   RANGO=diff(range(., na.rm = TRUE)),
+                                   CANTIDAD= n()))
+  eda_tiempo<-MYEDA(data_1$Tiempo_Servicio_seg,plot=T)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(kableExtra)
+kable(eda_tiempo$TOT) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+Gracias a este análisis podemos darnos cuenta que esta varible tratada no sigue una distribución normal, como podemos ver en el histograma y en el resultado de lillie p-val ya que existen muchos valores atípicos 
+
+
+###Análisis para la variable Sucursal 
+```{r}
+  dt<-data_1 %>%  group_by(Sucursal) %>% summarise_at(vars(Tiempo_Servicio_seg), 
+                                              funs(MEDIA= mean(., na.rm=TRUE),
+                                                   VARIANZA= var(., na.rm = TRUE),
+                                                  RIQ=IQR(., na.rm = TRUE),
+                                                  RANGO=diff(range(., na.rm = TRUE)),
+                                                  CANTIDAD= n()))
+  kable(dt) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+
+```{r}
+boxplot(data_1$Tiempo_Servicio_seg ~ data_1$Sucursal)
+```
+
+Vemos que el problema por la existencia de muchos datos atípicos sigue por lo que se hace una transformación para obtener un mejor resultado
+```{r}
+data_1 <- data_1 %>% mutate(LTS=log(Tiempo_Servicio_seg))
+```
+```{r echo=FALSE, message=FALSE, warning=FALSE, paged.print=FALSE}
+  data_1 <- data_1 %>% mutate(TRANS=log(Tiempo_Servicio_seg))
+  dt1<-data_1 %>%  group_by(Sucursal) %>% summarise_at(vars(TRANS), 
+                                              funs(MEDIA= mean(., na.rm=TRUE),
+                                                   VARIANZA= var(., na.rm = TRUE),
+                                                   RIQ=IQR(., na.rm = TRUE),
+                                                   RANGO=diff(range(., na.rm = TRUE)),
+                                                   CANTIDAD= n()))
+  kable(dt1) %>%
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+   boxplot(data_1$LTS ~ data_1$Sucursal,xlab = "Sucursal",ylab = "Tiempo de Servicio Min")
+  
+```
+
+###Análisis Exploratorio por Sucursal (nueva variable)
+
+Gracias a las transformación nos ayudará para realizar el análisis exploratorio con la función MYEDA
+```{r echo=FALSE}
+  suc_Riocentro_sur <- data_1 %>% dplyr::filter(ID_Sucursal=="62")
+  suc_Centro <- data_1 %>% dplyr::filter(ID_Sucursal=="85")
+  suc_Alborada <- data_1 %>% dplyr::filter(ID_Sucursal=="267")
+  suc_Mall_del_sol <- data_1 %>% dplyr::filter(ID_Sucursal=="443")
+  suc_Via_Daule <- data_1 %>% dplyr::filter(ID_Sucursal=="586") 
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+  ##
+ source("funciones.R")
+  eda_Riocentro_sur<-MYEDA(suc_Riocentro_sur$TRANS)
+  kable(eda_Riocentro_sur[1]) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+  ##
+  eda_Centro<-MYEDA(suc_Centro$TRANS)
+  kable(eda_Centro[1]) %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+  ##
+  eda_alborada<-MYEDA(suc_Alborada$TRANS)
+  kable(eda_alborada[1]) %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+  ##
+  eda_mall<-MYEDA(suc_Mall_del_sol$TRANS)
+  kable(eda_mall[1]) %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+  ##
+  eda_via_daule<-MYEDA(suc_Via_Daule$TRANS)
+  kable(eda_via_daule[1]) %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+  
+  atipicos<-c("ati_Riocentro_sur"=eda_Riocentro_sur[4],
+              "ati_Centro"=eda_Centro[4],
+             "ati_alborada"=eda_alborada[4],
+             "ati_mall"=eda_mall[4],
+             "ati_via_daule"=eda_via_daule[4])
+ atipicos
+  
+```
+
+####Análisis sucursal Centro
+
+Dada que la sucursal Centro presenta el mayor número de atípicios analizaremos las variables dentro de la ella
+
+```{r}
+ suc<-suc_Centro%>% group_by(Cajero,Sexo,Anio.experiencia,Edad,Nivel_Formacion) %>% 
+    summarise(Tiempo_min_prom=mean(Tiempo_Servicio_seg)/60,
+              Transaccciones=n()) %>%
+    kable()%>% 
+    kable_styling(bootstrap_options = c("striped","hover", "condensed", "responsive" ))
+```
+ 
+ De aquí vamos a buscar el cajero con más número de transacciones y hacer su respesctivo análisis y este es el cajero numero 3983, Femenino, Bachiller, 33 años, y 6 años de experiencia con un total de 4280 y en promedio tiene el menor tiempo con 2.6
+ 
+#####Análisis exploratorio de cajero más eficiente
+ 
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+source("funciones.R")
+suc_Centro_cajero3983 <- suc_Centro[suc_Centro$Cajero=="3983",]
+eda1<-MYEDA(suc_Centro_cajero3983$TRANS)
+eda1[1] %>% 
+kable() %>% 
+kable_styling(bootstrap_options = c("striped","hover", "condensed", "responsive" ))
+```
+
+```{r}
+boxplot(suc_Centro_cajero3983$TRANS ~ 
+          suc_Centro_cajero3983$Transaccion)
+```
+ 
+ De este resultado, se puede observar menos inconsistencias gracias a la transformación realizada en la variable `Tiempo_Servicio_seg` valiendonos de la variable transacción.
+ 
+##Análisis exploratorio de la variable Monto
+
+```{r}
+source("funciones.R")
+  data_1%>% summarise_at(vars(Monto), 
+                              funs(MEDIA= mean(., na.rm=TRUE), 
+                                   VARIANZA= var(., na.rm = TRUE),
+                                   RIQ=IQR(., na.rm = TRUE),
+                                   RANGO=diff(range(., na.rm = TRUE)),
+                                   CANTIDAD= n()))
+  eda_monto<-MYEDA(data_1$Monto,plot=T)
+```
+
+```{r}
+kable(eda_monto$TOT) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+```
+
+###Análisis exploratorio por Sucursal
+```{r echo=FALSE}
+ source("funciones.R")
+  eda_Riocentro_sur_Monto<-MYEDA(suc_Riocentro_sur$Monto)
+  kable(eda_Riocentro_sur_Monto[1]) %>% 
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+  ##
+  eda_Centro_Monto<-MYEDA(suc_Centro$Monto)
+  kable(eda_Centro_Monto[1]) %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+  ##
+  eda_alborada_Monto<-MYEDA(suc_Alborada$Monto)
+  kable(eda_alborada_Monto[1]) %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+  ##
+  eda_mall_Monto<-MYEDA(suc_Mall_del_sol$Monto)
+  kable(eda_mall_Monto[1]) %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+  ##
+  eda_via_daule_Monto<-MYEDA(suc_Via_Daule$Monto)
+  kable(eda_via_daule_Monto[1]) %>% 
+    kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"))
+
+```
+
+Del mismo modo, en la Sucursal Centro es donde existen más transacciones y más variabilidad de la varibale Monto.
+
+```{r}
+sexo<-data_1 %>% select(Sexo)
+table1<-table(sexo)
+table1<-prop.table(table1);table1
+barplot(table1, xlab='sexo', ylab = 'frecuencia relativa', las=1)
+```
+```{r}
+data_banco %>% filter(Sucursal==85)%>% summarise(MEDIA=mean(Tiempo_Servicio_seg,na.rm=T), CANTIDAD=n()) View
+
+
+
+library('nortest')
+library('MASS')
+
+
+SUC1 <- data_1[data_banco$Sucursal=="85",] 
+S1<-SUC1 %>% rename(TiempoServicioSeg= Tiempo_Servicio_seg) %>%
+  summarise_at( vars(Monto, TiempoServicioSeg), 
+                funs (
+                  Media= mean(., na.rm=TRUE), 
+                  MediaAcot= mean(., na.rm = TRUE, trim = 0.05),
+                  Cantidad = n()
+                )
+  ) %>% 
+  gather %>% 
+  separate(key, c("Var","Medida"), sep = "_") %>% 
+  spread(Medida, value) 
+str(SUC1)
+str(S1)
+a=SUC1 %>% filter(Transaccion=="Deposito")  ###
+b=(a$Tiempo_Servicio_seg)
+mean(b)
+boxplot(b)
+c=sd(a$Tiempo_Servicio_seg/60) #minutos
+coe=(c/b)
+boxplot(SUC1)
+lillie.test(b)
+lillie.test(coe)
+y=log(b)
+boxplot(y)
+library('caret')
+ ### transformacion
+plot(density(y)) 
+bx=BoxCoxTrans(b)
+names(bx)
+lambda<-bx$lambda
+y<-b^(lambda)
+plot(density(y))
+lillie.test(y)
+####teorema central del límite 
+##calculo un intervalo de confianza estimado 
+t.test(y)
+
+e<-data_banco %>% group_by(Cajero) %>% 
+  summarise_at(vars(Transaccion), funs(Num_Trans=n()))
+#se concluye que el cajero 321 realiza 3 transacciones, es decir este cajero debe ser excluido del análisis .
+###  los metodos boostrap estimo los valores z_alfa/2 
+### ejercicio donde no se cumpla es decir, dónde n=14 transacciones, 
+data_banco 
+
+```
+
+
+
